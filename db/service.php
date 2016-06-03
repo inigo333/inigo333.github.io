@@ -1,7 +1,7 @@
 <?php
  
 // Create connection
-$con=mysqli_connect("localhost","sql5122121","fgSr5msxEv","sql5122121");
+$con=mysqli_connect("sql5.freemysqlhosting.net","sql5122121","fgSr5msxEv","sql5122121");
  
 // Check connection
 if (mysqli_connect_errno())
