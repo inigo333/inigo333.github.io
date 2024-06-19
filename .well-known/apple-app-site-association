@@ -1,0 +1,22 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["745YFU782H.navenio.ils"],
+        "components": [
+          {
+            "/": "/navenio*",
+            "comment": "Matches any URL with a path that starts with /navenio"
+          },
+          {
+            "/": "/headless/*",
+            "?": {
+              "deviceId": "?*"
+            },
+            "comment": "Matches any URL with a path that starts with /headless and that has a query item with name 'deviceId'."
+          }
+        ]
+      }
+    ]
+  }
+}
