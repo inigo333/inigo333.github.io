@@ -50,6 +50,12 @@
   .drop strong { display: block; font-size: 18px; }
   .drop span { color: var(--muted); font-size: 14px; }
   .drop input { display: none; }
+  .modes { display: grid; gap: 8px; margin-top: 16px; }
+  @media (min-width: 640px) { .modes { grid-template-columns: 1fr 1fr; } }
+  .mode { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 12px; cursor: pointer; }
+  .mode:has(input:checked) { border-color: var(--accent); }
+  .mode input { margin-top: 4px; }
+  .mode small { display: block; color: var(--muted); font-size: 13px; }
   .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
   .file { flex: 1; min-width: 200px; color: var(--muted); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   button, .btn {
@@ -84,7 +90,7 @@
 <main>
   <header>
     <h1>Audio a partitura</h1>
-    <p>Sube una canción y obtén la partitura separada por instrumentos: voz, piano, guitarra, bajo y batería.</p>
+    <p>Sube una canción y obtén su partitura: la melodía con los acordes cifrados, o una partitura completa por instrumentos.</p>
   </header>
 
   <section class="card" id="upload">
@@ -94,6 +100,12 @@
       <strong>Arrastra un archivo de audio aquí</strong>
       <span>o haz clic para elegirlo · mp3, wav, m4a, flac · máximo 8 minutos y 40 MB</span>
     </label>
+    <div class="modes">
+      <label class="mode"><input type="radio" name="mode" value="lead" checked>
+        <span><strong>Melodía y acordes</strong><small>Un pentagrama con la melodía, el cifrado y los diagramas de guitarra. Como una hoja de cancionero.</small></span></label>
+      <label class="mode"><input type="radio" name="mode" value="full">
+        <span><strong>Todos los instrumentos</strong><small>Voz, piano, guitarra, bajo y batería en pentagramas separados. Tarda más y necesita más retoque.</small></span></label>
+    </div>
     <div class="row">
       <div class="file" id="filename">Ningún archivo seleccionado</div>
       <button class="primary" id="go" disabled>Transcribir</button>
@@ -116,7 +128,7 @@
       <button id="again">Otra canción</button>
     </div>
     <div id="score"></div>
-    <p class="hint">Es una transcripción automática: un borrador avanzado para abrir en MuseScore y retocar, no una partitura definitiva. El MusicXML conserva todas las partes y se puede editar.</p>
+    <p class="hint">Es una transcripción automática: un borrador avanzado para abrir en MuseScore y retocar, no una partitura definitiva. Los diagramas de guitarra se ven en el PDF y en MuseScore.</p>
   </section>
 
   <footer>
@@ -138,6 +150,7 @@
     ["separate", "Separando instrumentos"],
     ["analyze", "Analizando tempo, compás y tonalidad"],
     ["transcribe", "Transcribiendo"],
+    ["chords", "Detectando los acordes"],
     ["notate", "Generando la partitura"],
   ];
   const STEM_NAMES = { vocals: "voz", piano: "piano", guitar: "guitarra", bass: "bajo", other: "otros instrumentos", drums: "batería" };
@@ -192,6 +205,7 @@
 
     const body = new FormData();
     body.append("file", file, file.name);
+    body.append("mode", document.querySelector('input[name="mode"]:checked').value);
     let id;
     try {
       const r = await fetch(`${API}/transcribe`, { method: "POST", body });
@@ -252,12 +266,20 @@
     $("progress").classList.add("hidden");
     $("result").classList.remove("hidden");
     const parts = data.parts.map((p) => p.name).join(", ");
-    $("meta").innerHTML = [
+    const chips = [
       `<span class="chip">Tempo <b>${Math.round(data.tempo)}</b></span>`,
+      `<span class="chip">Compás <b>${data.time_sig || "4/4"}</b></span>`,
       `<span class="chip">Tonalidad <b>${data.key.replace("major", "mayor").replace("minor", "menor")}</b></span>`,
       `<span class="chip">Duración <b>${Math.floor(data.duration / 60)}:${String(Math.round(data.duration % 60)).padStart(2, "0")}</b></span>`,
-      `<span class="chip">Partes <b>${parts || "ninguna"}</b></span>`,
-    ].join("");
+    ];
+    if (data.mode === "lead") {
+      const uniq = [...new Set(data.chords || [])];
+      chips.push(`<span class="chip">Acordes <b>${uniq.join(" · ") || "ninguno"}</b></span>`);
+      chips.push(`<span class="chip">Melodía de <b>${STEM_NAMES[data.parts[0]?.stem] || "instrumento"}</b></span>`);
+    } else {
+      chips.push(`<span class="chip">Partes <b>${parts || "ninguna"}</b></span>`);
+    }
+    $("meta").innerHTML = chips.join("");
     const base = (data.title || "partitura").replace(/[^\w\-. ]+/g, "_");
     const pdf = $("dlPdf"), xml = $("dlXml"), mid = $("dlMid");
     pdf.href = blobUrl(data.files["score.pdf"], "application/pdf"); pdf.download = `${base}.pdf`;
