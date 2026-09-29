@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audio a partitura</title>
+<meta name="description" content="Sube una canción en mp3 y obtén la partitura por instrumentos: PDF, MusicXML y MIDI.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎼</text></svg>">
+<style>
+  :root {
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --text: #1c1b18;
+    --muted: #6b675e;
+    --line: #e2dfd6;
+    --accent: #b5462d;
+    --accent-ink: #ffffff;
+    --ok: #2f7d4f;
+    --err: #b3261e;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161513; --surface: #201f1c; --text: #ece9e1; --muted: #a29d92; --line: #35332e;
+      --accent: #e07a5f; --accent-ink: #1a0f0a; --ok: #7fc59a; --err: #ff8a80;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161513; --surface: #201f1c; --text: #ece9e1; --muted: #a29d92; --line: #35332e;
+    --accent: #e07a5f; --accent-ink: #1a0f0a; --ok: #7fc59a; --err: #ff8a80;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 32px 16px 64px; }
+  header h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; margin-top: 20px; }
+  .drop {
+    border: 2px dashed var(--line); border-radius: var(--radius); padding: 36px 16px; text-align: center;
+    cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .drop.over, .drop:hover { border-color: var(--accent); }
+  .drop strong { display: block; font-size: 18px; }
+  .drop span { color: var(--muted); font-size: 14px; }
+  .drop input { display: none; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+  .file { flex: 1; min-width: 200px; color: var(--muted); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  button, .btn {
+    appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--text);
+    font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 999px; cursor: pointer; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .stages { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+  .stages li { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+  .stages li .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); flex: none; }
+  .stages li.active { color: var(--text); }
+  .stages li.active .dot { background: var(--accent); animation: pulse 1.2s infinite; }
+  .stages li.done { color: var(--text); }
+  .stages li.done .dot { background: var(--ok); }
+  @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.5); } }
+  .meta { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; }
+  .chip { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 14px; color: var(--muted); }
+  .chip b { color: var(--text); font-weight: 600; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+  #score { background: #fff; border-radius: 10px; border: 1px solid var(--line); overflow: auto; min-height: 200px; }
+  .hint { color: var(--muted); font-size: 14px; margin: 8px 0 0; }
+  .error { color: var(--err); font-weight: 600; }
+  .hidden { display: none !important; }
+  footer { margin-top: 32px; color: var(--muted); font-size: 13px; }
+  footer p { margin: 4px 0; }
+  .elapsed { color: var(--muted); font-size: 14px; margin-top: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Audio a partitura</h1>
+    <p>Sube una canción y obtén la partitura separada por instrumentos: voz, piano, guitarra, bajo y batería.</p>
+  </header>
+
+  <section class="card" id="upload">
+    <label class="drop" id="drop">
+      <input type="file" id="file" accept=".mp3,.wav,.m4a,.flac,.ogg,.aac,audio/*">
+      <strong>Arrastra un archivo de audio aquí</strong>
+      <span>o haz clic para elegirlo · mp3, wav, m4a, flac · máximo 8 minutos y 40 MB</span>
+    </label>
+    <div class="row">
+      <div class="file" id="filename">Ningún archivo seleccionado</div>
+      <button class="primary" id="go" disabled>Transcribir</button>
+    </div>
+    <p class="hint error hidden" id="uploadError"></p>
+  </section>
+
+  <section class="card hidden" id="progress">
+    <ul class="stages" id="stages"></ul>
+    <p class="elapsed" id="elapsed"></p>
+    <p class="hint">Una canción de 3 minutos tarda entre 1 y 3 minutos. Si el servidor estaba dormido, el primer paso puede tardar un poco más.</p>
+  </section>
+
+  <section class="card hidden" id="result">
+    <div class="meta" id="meta"></div>
+    <div class="actions">
+      <a class="btn" id="dlPdf" download>Descargar PDF</a>
+      <a class="btn" id="dlXml" download>MusicXML</a>
+      <a class="btn" id="dlMid" download>MIDI</a>
+      <button id="again">Otra canción</button>
+    </div>
+    <div id="score"></div>
+    <p class="hint">Es una transcripción automática: un borrador avanzado para abrir en MuseScore y retocar, no una partitura definitiva. El MusicXML conserva todas las partes y se puede editar.</p>
+  </section>
+
+  <footer>
+    <p>El audio se procesa en un servidor con GPU y se borra al terminar. No se guarda ninguna copia.</p>
+    <p>Separación de pistas con Demucs · transcripción con Basic Pitch y un modelo específico de piano · ritmo con madmom · grabado con MuseScore.</p>
+  </footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@1/build/opensheetmusicdisplay.min.js"></script>
+<script>
+(() => {
+  const DEFAULT_API = "__API_BASE__";
+  const API = new URLSearchParams(location.search).get("api") || DEFAULT_API;
+
+  const STAGES = [
+    ["upload", "Subiendo el audio"],
+    ["queued", "En cola"],
+    ["decode", "Decodificando"],
+    ["separate", "Separando instrumentos"],
+    ["analyze", "Analizando tempo, compás y tonalidad"],
+    ["transcribe", "Transcribiendo"],
+    ["notate", "Generando la partitura"],
+  ];
+  const STEM_NAMES = { vocals: "voz", piano: "piano", guitar: "guitarra", bass: "bajo", other: "otros instrumentos", drums: "batería" };
+
+  const $ = (id) => document.getElementById(id);
+  const drop = $("drop"), fileInput = $("file"), go = $("go"), filename = $("filename");
+  let file = null, timer = null, started = 0, osmd = null;
+
+  function setFile(f) {
+    file = f;
+    filename.textContent = f ? `${f.name} · ${(f.size / 1048576).toFixed(1)} MB` : "Ningún archivo seleccionado";
+    go.disabled = !f;
+    $("uploadError").classList.add("hidden");
+  }
+  fileInput.addEventListener("change", () => setFile(fileInput.files[0] || null));
+  ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", (e) => { const f = e.dataTransfer.files[0]; if (f) setFile(f); });
+
+  function renderStages(current, detail) {
+    const ul = $("stages");
+    ul.innerHTML = "";
+    const idx = STAGES.findIndex(([k]) => k === current);
+    STAGES.forEach(([k, label], i) => {
+      const li = document.createElement("li");
+      li.className = i < idx ? "done" : i === idx ? "active" : "";
+      const text = (k === "transcribe" && i === idx && detail) ? `${label}: ${detail}` : label;
+      li.innerHTML = `<span class="dot"></span><span>${text}</span>`;
+      ul.appendChild(li);
+    });
+  }
+
+  function showError(msg) {
+    clearInterval(timer);
+    $("progress").classList.add("hidden");
+    $("upload").classList.remove("hidden");
+    const el = $("uploadError");
+    el.textContent = msg;
+    el.classList.remove("hidden");
+  }
+
+  async function start() {
+    if (!file) return;
+    go.disabled = true;
+    $("upload").classList.add("hidden");
+    $("result").classList.add("hidden");
+    $("progress").classList.remove("hidden");
+    started = Date.now();
+    renderStages("upload");
+    tick();
+    timer = setInterval(tick, 1000);
+
+    const body = new FormData();
+    body.append("file", file, file.name);
+    let id;
+    try {
+      const r = await fetch(`${API}/transcribe`, { method: "POST", body });
+      if (!r.ok) {
+        let msg = `Error ${r.status}`;
+        try { msg = (await r.json()).detail || msg; } catch (_) {}
+        throw new Error(msg);
+      }
+      id = (await r.json()).id;
+    } catch (e) {
+      showError(`No se ha podido enviar el audio: ${e.message}`);
+      go.disabled = false;
+      return;
+    }
+    renderStages("queued");
+    poll(id);
+  }
+
+  function tick() {
+    const s = Math.round((Date.now() - started) / 1000);
+    $("elapsed").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  }
+
+  async function poll(id) {
+    let failures = 0;
+    while (true) {
+      await new Promise((r) => setTimeout(r, 2500));
+      let data;
+      try {
+        const r = await fetch(`${API}/status/${id}`);
+        data = await r.json();
+        failures = 0;
+      } catch (e) {
+        if (++failures > 8) { showError("Se ha perdido la conexión con el servidor."); return; }
+        continue;
+      }
+      if (data.status === "running") {
+        const [stage, detail] = (data.stage || "queued").split(":");
+        renderStages(stage, detail ? STEM_NAMES[detail] || detail : "");
+      } else if (data.status === "done") {
+        clearInterval(timer);
+        showResult(data);
+        return;
+      } else {
+        showError(`La transcripción ha fallado. ${data.message || ""}`);
+        go.disabled = false;
+        return;
+      }
+    }
+  }
+
+  function blobUrl(b64, type) {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    return URL.createObjectURL(new Blob([bytes], { type }));
+  }
+
+  async function showResult(data) {
+    $("progress").classList.add("hidden");
+    $("result").classList.remove("hidden");
+    const parts = data.parts.map((p) => p.name).join(", ");
+    $("meta").innerHTML = [
+      `<span class="chip">Tempo <b>${Math.round(data.tempo)}</b></span>`,
+      `<span class="chip">Tonalidad <b>${data.key.replace("major", "mayor").replace("minor", "menor")}</b></span>`,
+      `<span class="chip">Duración <b>${Math.floor(data.duration / 60)}:${String(Math.round(data.duration % 60)).padStart(2, "0")}</b></span>`,
+      `<span class="chip">Partes <b>${parts || "ninguna"}</b></span>`,
+    ].join("");
+    const base = (data.title || "partitura").replace(/[^\w\-. ]+/g, "_");
+    const pdf = $("dlPdf"), xml = $("dlXml"), mid = $("dlMid");
+    pdf.href = blobUrl(data.files["score.pdf"], "application/pdf"); pdf.download = `${base}.pdf`;
+    xml.href = blobUrl(data.files["score.musicxml"], "application/vnd.recordare.musicxml+xml"); xml.download = `${base}.musicxml`;
+    mid.href = blobUrl(data.files["score.mid"], "audio/midi"); mid.download = `${base}.mid`;
+
+    const container = $("score");
+    container.innerHTML = "";
+    try {
+      osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay(container, { autoResize: true, drawTitle: true, drawingParameters: "default" });
+      await osmd.load(atob(data.files["score.musicxml"]));
+      osmd.zoom = window.innerWidth < 700 ? 0.55 : 0.75;
+      osmd.render();
+    } catch (e) {
+      container.innerHTML = `<p class="hint" style="padding:16px">No se ha podido previsualizar la partitura en el navegador. Descarga el PDF o el MusicXML.</p>`;
+      console.error(e);
+    }
+    container.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  go.addEventListener("click", start);
+  $("again").addEventListener("click", () => {
+    $("result").classList.add("hidden");
+    $("upload").classList.remove("hidden");
+    fileInput.value = "";
+    setFile(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+})();
+</script>
+</body>
+</html>
